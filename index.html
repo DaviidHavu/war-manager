@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>⚔️ War Manager – Clash of Clans</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:#0a0e1a;font-family:'Segoe UI',Arial,sans-serif;direction:rtl;}
+    button,input{font-family:inherit;}
+    button:active{opacity:0.8;}
+    @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+    @keyframes slideIn{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect}=React;
+
+const COLORS=["#e74c3c","#e67e22","#f1c40f","#2ecc71","#1abc9c","#3498db","#9b59b6","#e91e63","#00bcd4","#ff5722"];
+const HEB_DAYS=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
+const HEB_MONTHS=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+
+const DEFAULT_DATA={
+  admins:[
+    {id:1,name:"דויד",color:"#e74c3c"},
+    {id:2,name:"מנהל 2",color:"#e67e22"},
+    {id:3,name:"מנהל 3",color:"#2ecc71"},
+  ],
+  assignments:{}
+};
+
+function loadData(){
+  try{const d=JSON.parse(localStorage.getItem("coc-war-data")||"{}");return{admins:d.admins||DEFAULT_DATA.admins,assignments:d.assignments||{}};}
+  catch{return DEFAULT_DATA;}
+}
+
+function getDays(y,m){return new Date(y,m+1,0).getDate();}
+function getFirst(y,m){return new Date(y,m,1).getDay();}
+
+function App(){
+  const today=new Date();
+  const [year,setYear]=useState(today.getFullYear());
+  const [month,setMonth]=useState(today.getMonth());
+  const [data,setData]=useState(loadData);
+  const [selDay,setSelDay]=useState(null);
+  const [toast,setToast]=useState(null);
+
+  // Listen for storage changes (admin updates)
+  useEffect(()=>{
+    const handler=()=>setData(loadData());
+    window.addEventListener("storage",handler);
+    return()=>window.removeEventListener("storage",handler);
+  },[]);
+
+  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2200);};
+  const key=d=>`${year}-${month+1}-${d}`;
+  const daysInMonth=getDays(year,month);
+  const firstDay=getFirst(year,month);
+  const getAdmin=d=>data.admins.find(a=>a.id===data.assignments[key(d)])||null;
+
+  const cells=[];
+  for(let i=0;i<firstDay;i++)cells.push(null);
+  for(let d=1;d<=daysInMonth;d++)cells.push(d);
+  while(cells.length%7!==0)cells.push(null);
+
+  const unassigned=Array.from({length:daysInMonth},(_,i)=>i+1).filter(d=>!data.assignments[key(d)]).length;
+
+  const stats=data.admins.map(a=>({
+    ...a,
+    count:Object.keys(data.assignments).filter(k=>k.startsWith(`${year}-${month+1}-`)&&data.assignments[k]===a.id).length
+  })).sort((a,b)=>b.count-a.count);
+
+  const prevMonth=()=>{if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1);setSelDay(null);};
+  const nextMonth=()=>{if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1);setSelDay(null);};
+
+  return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0a0e1a 0%,#1a1f35 60%,#0d1520 100%)",color:"#e8eaf6",paddingBottom:40}}>
+
+      {/* Header */}
+      <div style={{background:"linear-gradient(90deg,#1a2744,#0f3460,#1a2744)",borderBottom:"2px solid #e8b84b",padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 4px 24px #000a"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <span style={{fontSize:32}}>⚔️</span>
+          <div>
+            <div style={{fontSize:20,fontWeight:800,color:"#e8b84b"}}>War Manager</div>
+            <div style={{fontSize:11,color:"#90a4c0",marginTop:1}}>Clash of Clans · ניהול מלחמות</div>
+          </div>
+        </div>
+        <a href="admin.html" style={{background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:8,padding:"8px 14px",color:"#7a8faa",fontSize:12,textDecoration:"none",display:"flex",alignItems:"center",gap:6}}>
+          🔒 אדמין
+        </a>
+      </div>
+
+      <div style={{maxWidth:680,margin:"0 auto",padding:"18px 12px 0"}}>
+
+        {/* Month nav */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+          <button onClick={nextMonth} style={{background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:8,color:"#e8b84b",fontSize:22,width:42,height:42,cursor:"pointer"}}>‹</button>
+          <span style={{fontSize:20,fontWeight:700,color:"#e8b84b"}}>{HEB_MONTHS[month]} {year}</span>
+          <button onClick={prevMonth} style={{background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:8,color:"#e8b84b",fontSize:22,width:42,height:42,cursor:"pointer"}}>›</button>
+        </div>
+
+        {/* Stats */}
+        <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap"}}>
+          <div style={{background:"#e74c3c22",border:"1px solid #e74c3c",borderRadius:20,padding:"5px 14px",fontSize:13,color:"#e74c3c",fontWeight:600}}>🔴 {unassigned} ימים ללא שיבוץ</div>
+          <div style={{background:"#2ecc7122",border:"1px solid #2ecc71",borderRadius:20,padding:"5px 14px",fontSize:13,color:"#2ecc71",fontWeight:600}}>✅ {daysInMonth-unassigned} ימים משובצים</div>
+        </div>
+
+        {/* Day headers */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
+          {HEB_DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:11,color:"#7a8faa",padding:"4px 0",fontWeight:600}}>{d}</div>)}
+        </div>
+
+        {/* Calendar */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+          {cells.map((day,i)=>{
+            if(!day)return<div key={i}/>;
+            const admin=getAdmin(day);
+            const isToday=day===today.getDate()&&month===today.getMonth()&&year===today.getFullYear();
+            const isSel=selDay===day;
+            return(
+              <div key={day} onClick={()=>setSelDay(isSel?null:day)} style={{
+                borderRadius:8,
+                border:isSel?"2px solid #e8b84b":isToday?"2px solid #3498db":"2px solid #1e2d4a",
+                background:admin?admin.color+"33":"#111827",
+                padding:"7px 3px 6px",cursor:"pointer",minHeight:58,
+                display:"flex",flexDirection:"column",alignItems:"center",
+                transition:"all 0.15s",
+                boxShadow:isSel?"0 0 0 2px #e8b84b55":"none"
+              }}>
+                <div style={{fontSize:13,fontWeight:700,color:isToday?"#3498db":"#c5d0e0",marginBottom:4}}>{day}</div>
+                {admin
+                  ?<div style={{background:admin.color,borderRadius:5,padding:"2px 5px",fontSize:9,fontWeight:700,color:"#fff",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{admin.name}</div>
+                  :<div style={{fontSize:15,color:"#2a3a5a"}}>+</div>
+                }
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Selected day info */}
+        {selDay&&(
+          <div style={{marginTop:14,background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:12,padding:"14px 16px",animation:"slideIn 0.2s"}}>
+            <div style={{fontSize:14,color:"#90a4c0",marginBottom:6}}>{selDay} {HEB_MONTHS[month]} {year}</div>
+            {getAdmin(selDay)
+              ?<div style={{display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:14,height:14,borderRadius:"50%",background:getAdmin(selDay).color}}/>
+                <span style={{fontSize:16,fontWeight:700,color:getAdmin(selDay).color}}>{getAdmin(selDay).name}</span>
+                <span style={{fontSize:13,color:"#7a8faa"}}>אחראי על המלחמה</span>
+               </div>
+              :<div style={{fontSize:14,color:"#7a8faa"}}>⚠️ אין שיבוץ ליום זה – פנה לאדמין לעדכן</div>
+            }
+          </div>
+        )}
+
+        {/* Monthly summary */}
+        <div style={{marginTop:22,background:"#111827",borderRadius:12,padding:"16px 18px",border:"1px solid #1e2d4a"}}>
+          <div style={{fontSize:14,fontWeight:700,color:"#90a4c0",marginBottom:12}}>📊 סיכום {HEB_MONTHS[month]}</div>
+          {stats.map(a=>(
+            <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+              <div style={{width:12,height:12,borderRadius:"50%",background:a.color,flexShrink:0}}/>
+              <div style={{flex:1,fontSize:14}}>{a.name}</div>
+              <div style={{background:a.color+"33",border:`1px solid ${a.color}`,borderRadius:6,padding:"2px 10px",fontSize:13,fontWeight:700,color:a.color}}>{a.count} ימים</div>
+              <div style={{width:80,height:6,background:"#1e2d4a",borderRadius:4,overflow:"hidden"}}>
+                <div style={{height:"100%",borderRadius:4,background:a.color,width:`${daysInMonth?(a.count/daysInMonth)*100:0}%`,transition:"width 0.4s"}}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {toast&&<div style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:"#2ecc71",color:"#fff",fontWeight:700,fontSize:15,borderRadius:10,padding:"12px 28px",boxShadow:"0 4px 20px #0008",zIndex:1000,animation:"fadeIn 0.2s",whiteSpace:"nowrap"}}>{toast}</div>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
