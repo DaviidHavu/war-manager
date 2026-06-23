@@ -7,14 +7,21 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, onValue, set, remove, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    const app = initializeApp({ databaseURL: "https://war-manager-5c4c6-default-rtdb.firebaseio.com" });
+    const db = getDatabase(app);
+    window.__firebase = { ref, onValue, set, remove, update, db };
+  </script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;}
     body{background:#0a0e1a;font-family:'Segoe UI',Arial,sans-serif;direction:rtl;}
     button,input{font-family:inherit;}
-    button:active{opacity:0.8;}
     @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
     @keyframes slideIn{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
     @keyframes shake{0%,100%{transform:translateX(0);}20%,60%{transform:translateX(-8px);}40%,80%{transform:translateX(8px);}}
+    @keyframes spin{to{transform:rotate(360deg);}}
     .shake{animation:shake 0.4s;}
   </style>
 </head>
@@ -22,224 +29,161 @@
 <div id="root"></div>
 <script type="text/babel">
 const {useState,useEffect,useRef}=React;
-
-// ====== שנה כאן את הסיסמה שלך ======
-const ADMIN_PASSWORD = "clash2024";
-// ====================================
-
+const ADMIN_PASSWORD="clash2024";
 const COLORS=["#e74c3c","#e67e22","#f1c40f","#2ecc71","#1abc9c","#3498db","#9b59b6","#e91e63","#00bcd4","#ff5722"];
 const HEB_DAYS=["א׳","ב׳","ג׳","ד׳","ה׳","ו׳","ש׳"];
 const HEB_MONTHS=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
-
-const DEFAULT_DATA={
-  admins:[
-    {id:1,name:"דויד",color:"#e74c3c"},
-    {id:2,name:"מנהל 2",color:"#e67e22"},
-    {id:3,name:"מנהל 3",color:"#2ecc71"},
-  ],
-  assignments:{}
-};
-
-function loadData(){
-  try{const d=JSON.parse(localStorage.getItem("coc-war-data")||"{}");return{admins:d.admins||DEFAULT_DATA.admins,assignments:d.assignments||{}}}
-  catch{return DEFAULT_DATA;}
-}
-function saveData(d){
-  localStorage.setItem("coc-war-data",JSON.stringify(d));
-  window.dispatchEvent(new Event("storage"));
-}
-
+const DEFAULT_ADMINS=[{id:"1",name:"דויד",color:"#e74c3c"},{id:"2",name:"מנהל 2",color:"#e67e22"},{id:"3",name:"מנהל 3",color:"#2ecc71"}];
 function getDays(y,m){return new Date(y,m+1,0).getDate();}
 function getFirst(y,m){return new Date(y,m,1).getDay();}
 
-/* ─── Login Screen ─── */
 function LoginScreen({onLogin}){
   const [pw,setPw]=useState("");
   const [shake,setShake]=useState(false);
   const [err,setErr]=useState(false);
   const inputRef=useRef();
-
   useEffect(()=>inputRef.current?.focus(),[]);
-
   const tryLogin=()=>{
     if(pw===ADMIN_PASSWORD){onLogin();}
-    else{
-      setErr(true);setShake(true);setPw("");
-      setTimeout(()=>{setShake(false);inputRef.current?.focus();},500);
-    }
+    else{setErr(true);setShake(true);setPw("");setTimeout(()=>{setShake(false);inputRef.current?.focus();},500);}
   };
-
   return(
     <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0a0e1a,#1a1f35)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
       <div className={shake?"shake":""} style={{background:"#111827",border:"1px solid #2a3a5a",borderRadius:16,padding:"40px 32px",width:"100%",maxWidth:360,textAlign:"center",boxShadow:"0 20px 60px #000c"}}>
         <div style={{fontSize:48,marginBottom:12}}>🔒</div>
         <div style={{fontSize:22,fontWeight:800,color:"#e8b84b",marginBottom:6}}>כניסת אדמין</div>
         <div style={{fontSize:13,color:"#7a8faa",marginBottom:28}}>הזן סיסמה כדי להיכנס</div>
-        <input
-          ref={inputRef}
-          type="password"
-          value={pw}
-          onChange={e=>{setPw(e.target.value);setErr(false);}}
-          onKeyDown={e=>e.key==="Enter"&&tryLogin()}
-          placeholder="סיסמה..."
-          style={{width:"100%",background:"#1a2744",border:`1px solid ${err?"#e74c3c":"#2a3a5a"}`,borderRadius:10,padding:"12px 16px",color:"#e8eaf6",fontSize:16,outline:"none",marginBottom:err?8:16,textAlign:"center",direction:"ltr"}}
-        />
+        <input ref={inputRef} type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr(false);}} onKeyDown={e=>e.key==="Enter"&&tryLogin()} placeholder="סיסמה..." style={{width:"100%",background:"#1a2744",border:`1px solid ${err?"#e74c3c":"#2a3a5a"}`,borderRadius:10,padding:"12px 16px",color:"#e8eaf6",fontSize:16,outline:"none",marginBottom:err?8:16,textAlign:"center",direction:"ltr"}}/>
         {err&&<div style={{color:"#e74c3c",fontSize:13,marginBottom:12}}>סיסמה שגויה, נסה שוב</div>}
-        <button onClick={tryLogin} style={{width:"100%",background:"#e8b84b",border:"none",borderRadius:10,padding:"13px",color:"#111",fontWeight:800,fontSize:16,cursor:"pointer"}}>
-          כניסה ⚔️
-        </button>
+        <button onClick={tryLogin} style={{width:"100%",background:"#e8b84b",border:"none",borderRadius:10,padding:"13px",color:"#111",fontWeight:800,fontSize:16,cursor:"pointer"}}>כניסה ⚔️</button>
         <a href="index.html" style={{display:"block",marginTop:16,color:"#7a8faa",fontSize:13,textDecoration:"none"}}>← חזרה ללוח הראשי</a>
       </div>
     </div>
   );
 }
 
-/* ─── Admin Panel ─── */
 function AdminPanel(){
   const today=new Date();
   const [year,setYear]=useState(today.getFullYear());
   const [month,setMonth]=useState(today.getMonth());
-  const [data,setData]=useState(loadData);
+  const [admins,setAdmins]=useState([]);
+  const [assignments,setAssignments]=useState({});
   const [selDay,setSelDay]=useState(null);
   const [newName,setNewName]=useState("");
   const [tab,setTab]=useState("calendar");
   const [toast,setToast]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const fb=()=>window.__firebase;
 
-  const updateData=next=>{setData(next);saveData(next);};
+  useEffect(()=>{
+    const wait=()=>{
+      if(!window.__firebase){setTimeout(wait,100);return;}
+      const {ref,onValue,db}=fb();
+      onValue(ref(db,"admins"),(snap)=>{const v=snap.val();setAdmins(v?Object.values(v):DEFAULT_ADMINS);setLoading(false);});
+      onValue(ref(db,"assignments"),(snap)=>{setAssignments(snap.val()||{});});
+    };
+    wait();
+  },[]);
+
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2200);};
-  const key=d=>`${year}-${month+1}-${d}`;
+  const key=d=>`${year}_${month+1}_${d}`;
 
-  const assign=(day,id)=>{
-    const next={...data,assignments:{...data.assignments,[key(day)]:id}};
-    updateData(next);setSelDay(null);showToast("✓ שיבוץ עודכן");
+  const assign=async(day,id)=>{
+    const {ref,set,db}=fb();
+    await set(ref(db,`assignments/${key(day)}`),id);
+    setSelDay(null);showToast("✓ שיבוץ עודכן");
   };
-  const clearDay=day=>{
-    const a={...data.assignments};delete a[key(day)];
-    updateData({...data,assignments:a});setSelDay(null);showToast("שיבוץ הוסר");
+  const clearDay=async(day)=>{
+    const {ref,remove,db}=fb();
+    await remove(ref(db,`assignments/${key(day)}`));
+    setSelDay(null);showToast("שיבוץ הוסר");
   };
-
-  const addAdmin=()=>{
+  const addAdmin=async()=>{
     const n=newName.trim();
     if(!n)return;
-    if(data.admins.find(a=>a.name===n)){showToast("שם זה כבר קיים");return;}
-    const next={...data,admins:[...data.admins,{id:Date.now(),name:n,color:COLORS[data.admins.length%COLORS.length]}]};
-    updateData(next);setNewName("");showToast(`${n} נוסף ✓`);
+    if(admins.find(a=>a.name===n)){showToast("שם זה כבר קיים");return;}
+    const id=Date.now().toString();
+    const {ref,set,db}=fb();
+    await set(ref(db,`admins/${id}`),{id,name:n,color:COLORS[admins.length%COLORS.length]});
+    setNewName("");showToast(`${n} נוסף ✓`);
   };
-
-  const removeAdmin=id=>{
-    const a={...data.assignments};
-    Object.keys(a).forEach(k=>{if(a[k]===id)delete a[k];});
-    updateData({admins:data.admins.filter(a=>a.id!==id),assignments:a});
+  const removeAdmin=async(id)=>{
+    const {ref,remove,db}=fb();
+    await remove(ref(db,`admins/${id}`));
+    const toRemove=Object.keys(assignments).filter(k=>assignments[k]===id);
+    for(const k of toRemove) await remove(ref(db,`assignments/${k}`));
+    showToast("מנהל הוסר");
   };
-
-  const changeColor=(id,color)=>{
-    updateData({...data,admins:data.admins.map(a=>a.id===id?{...a,color}:a)});
+  const changeColor=async(id,color)=>{
+    const {ref,update,db}=fb();
+    await update(ref(db,`admins/${id}`),{color});
   };
-
-  const changeName=(id,name)=>{
-    updateData({...data,admins:data.admins.map(a=>a.id===id?{...a,name}:a)});
+  const changeName=async(id,name)=>{
+    const {ref,update,db}=fb();
+    await update(ref(db,`admins/${id}`),{name});
   };
-
-  // Auto-fill month: distribute evenly
-  const autoFill=()=>{
-    if(!data.admins.length)return;
+  const autoFill=async()=>{
+    if(!admins.length)return;
+    const {ref,set,db}=fb();
     const daysInM=getDays(year,month);
-    const newA={...data.assignments};
     for(let d=1;d<=daysInM;d++){
-      const k=`${year}-${month+1}-${d}`;
-      if(!newA[k]) newA[k]=data.admins[(d-1)%data.admins.length].id;
+      const k=key(d);
+      if(!assignments[k]) await set(ref(db,`assignments/${k}`),admins[(d-1)%admins.length].id);
     }
-    updateData({...data,assignments:newA});
     showToast("חלוקה אוטומטית הושלמה ✓");
   };
-
-  const clearMonth=()=>{
-    const newA={...data.assignments};
-    Object.keys(newA).forEach(k=>{if(k.startsWith(`${year}-${month+1}-`))delete newA[k];});
-    updateData({...data,assignments:newA});
+  const clearMonth=async()=>{
+    const {ref,remove,db}=fb();
+    const toRemove=Object.keys(assignments).filter(k=>k.startsWith(`${year}_${month+1}_`));
+    for(const k of toRemove) await remove(ref(db,`assignments/${k}`));
     setSelDay(null);showToast("החודש נוקה");
   };
 
   const daysInMonth=getDays(year,month);
   const firstDay=getFirst(year,month);
-  const getAdmin=d=>data.admins.find(a=>a.id===data.assignments[key(d)])||null;
-
+  const getAdmin=d=>admins.find(a=>a.id===assignments[key(d)])||null;
   const cells=[];
   for(let i=0;i<firstDay;i++)cells.push(null);
   for(let d=1;d<=daysInMonth;d++)cells.push(d);
   while(cells.length%7!==0)cells.push(null);
-
-  const stats=data.admins.map(a=>({
-    ...a,
-    count:Object.keys(data.assignments).filter(k=>k.startsWith(`${year}-${month+1}-`)&&data.assignments[k]===a.id).length
-  })).sort((a,b)=>b.count-a.count);
-
-  const unassigned=Array.from({length:daysInMonth},(_,i)=>i+1).filter(d=>!data.assignments[key(d)]).length;
-
+  const unassigned=Array.from({length:daysInMonth},(_,i)=>i+1).filter(d=>!assignments[key(d)]).length;
+  const stats=admins.map(a=>({...a,count:Object.keys(assignments).filter(k=>k.startsWith(`${year}_${month+1}_`)&&assignments[k]===a.id).length})).sort((a,b)=>b.count-a.count);
   const prevMonth=()=>{if(month===0){setMonth(11);setYear(y=>y-1);}else setMonth(m=>m-1);setSelDay(null);};
   const nextMonth=()=>{if(month===11){setMonth(0);setYear(y=>y+1);}else setMonth(m=>m+1);setSelDay(null);};
 
+  if(loading)return(<div style={{minHeight:"100vh",background:"#0a0e1a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}><div style={{width:48,height:48,border:"4px solid #1e2d4a",borderTop:"4px solid #e8b84b",borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/><div style={{color:"#7a8faa",fontSize:15}}>מתחבר ל־Firebase...</div></div>);
+
   return(
     <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0a0e1a,#1a1f35,#0d1520)",color:"#e8eaf6",paddingBottom:40}}>
-
-      {/* Header */}
       <div style={{background:"linear-gradient(90deg,#1a2744,#0f3460,#1a2744)",borderBottom:"2px solid #e8b84b",padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 4px 24px #000a"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <span style={{fontSize:28}}>🛡️</span>
-          <div>
-            <div style={{fontSize:18,fontWeight:800,color:"#e8b84b"}}>פאנל אדמין</div>
-            <div style={{fontSize:11,color:"#90a4c0"}}>War Manager · עריכה מלאה</div>
-          </div>
+        <div style={{display:"flex",alignItems:"center",gap:12}}><span style={{fontSize:28}}>🛡️</span><div><div style={{fontSize:18,fontWeight:800,color:"#e8b84b"}}>פאנל אדמין</div><div style={{fontSize:11,color:"#90a4c0"}}>עריכה מלאה · מסונכרן</div></div></div>
+        <div style={{display:"flex",gap:8}}>
+          <a href="stats.html" style={{textDecoration:"none",background:"#3498db22",border:"1px solid #3498db",borderRadius:8,padding:"7px 13px",color:"#3498db",fontSize:12,fontWeight:600}}>📊 סטטיסטיקות</a>
+          <a href="index.html" style={{textDecoration:"none",background:"#1a274499",border:"1px solid #2a3a5a",borderRadius:8,padding:"7px 13px",color:"#90a4c0",fontSize:12,fontWeight:600}}>👁️ ציבורי</a>
         </div>
-        <a href="index.html" style={{background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:8,padding:"8px 14px",color:"#90a4c0",fontSize:12,textDecoration:"none"}}>
-          👁️ תצוגה ציבורית
-        </a>
       </div>
-
-      {/* Tabs */}
       <div style={{display:"flex",borderBottom:"1px solid #2a3a5a",background:"#111827"}}>
-        {[["calendar","📅 שיבוץ חודשי"],["team","👥 ניהול מנהלים"]].map(([t,label])=>(
-          <button key={t} onClick={()=>setTab(t)} style={{
-            flex:1,padding:"13px 0",border:"none",cursor:"pointer",
-            background:tab===t?"#1a2744":"transparent",
-            color:tab===t?"#e8b84b":"#7a8faa",
-            fontWeight:tab===t?700:400,fontSize:15,
-            borderBottom:tab===t?"2px solid #e8b84b":"2px solid transparent"
-          }}>{label}</button>
+        {[["calendar","📅 שיבוץ חודשי"],["team","👥 מנהלים"]].map(([t,label])=>(
+          <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"13px 0",border:"none",cursor:"pointer",background:tab===t?"#1a2744":"transparent",color:tab===t?"#e8b84b":"#7a8faa",fontWeight:tab===t?700:400,fontSize:15,borderBottom:tab===t?"2px solid #e8b84b":"2px solid transparent"}}>{label}</button>
         ))}
       </div>
-
       <div style={{maxWidth:700,margin:"0 auto",padding:"18px 12px 0"}}>
-
-        {/* ── CALENDAR TAB ── */}
         {tab==="calendar"&&<>
-
-          {/* Month nav */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
             <button onClick={nextMonth} style={{background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:8,color:"#e8b84b",fontSize:22,width:42,height:42,cursor:"pointer"}}>‹</button>
             <span style={{fontSize:20,fontWeight:700,color:"#e8b84b"}}>{HEB_MONTHS[month]} {year}</span>
             <button onClick={prevMonth} style={{background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:8,color:"#e8b84b",fontSize:22,width:42,height:42,cursor:"pointer"}}>›</button>
           </div>
-
-          {/* Action buttons */}
           <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-            <button onClick={autoFill} style={{background:"#3498db22",border:"1px solid #3498db",borderRadius:8,padding:"8px 14px",color:"#3498db",cursor:"pointer",fontSize:13,fontWeight:600}}>
-              ⚡ חלוקה אוטומטית
-            </button>
-            <button onClick={clearMonth} style={{background:"#e74c3c22",border:"1px solid #e74c3c",borderRadius:8,padding:"8px 14px",color:"#e74c3c",cursor:"pointer",fontSize:13,fontWeight:600}}>
-              🗑️ נקה חודש
-            </button>
-            <div style={{background:unassigned>0?"#e74c3c22":"#2ecc7122",border:`1px solid ${unassigned>0?"#e74c3c":"#2ecc71"}`,borderRadius:20,padding:"8px 14px",fontSize:13,color:unassigned>0?"#e74c3c":"#2ecc71",fontWeight:600,display:"flex",alignItems:"center"}}>
+            <button onClick={autoFill} style={{background:"#3498db22",border:"1px solid #3498db",borderRadius:8,padding:"8px 14px",color:"#3498db",cursor:"pointer",fontSize:13,fontWeight:600}}>⚡ חלוקה אוטומטית</button>
+            <button onClick={clearMonth} style={{background:"#e74c3c22",border:"1px solid #e74c3c",borderRadius:8,padding:"8px 14px",color:"#e74c3c",cursor:"pointer",fontSize:13,fontWeight:600}}>🗑️ נקה חודש</button>
+            <div style={{background:unassigned>0?"#e74c3c22":"#2ecc7122",border:`1px solid ${unassigned>0?"#e74c3c":"#2ecc71"}`,borderRadius:20,padding:"8px 14px",fontSize:13,color:unassigned>0?"#e74c3c":"#2ecc71",fontWeight:600}}>
               {unassigned>0?`⚠️ ${unassigned} ימים ללא שיבוץ`:"✅ כל הימים משובצים"}
             </div>
           </div>
-
-          {/* Day headers */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
             {HEB_DAYS.map(d=><div key={d} style={{textAlign:"center",fontSize:11,color:"#7a8faa",padding:"4px 0",fontWeight:600}}>{d}</div>)}
           </div>
-
-          {/* Calendar */}
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
             {cells.map((day,i)=>{
               if(!day)return<div key={i}/>;
@@ -247,53 +191,25 @@ function AdminPanel(){
               const isToday=day===today.getDate()&&month===today.getMonth()&&year===today.getFullYear();
               const isSel=selDay===day;
               return(
-                <div key={day} onClick={()=>setSelDay(isSel?null:day)} style={{
-                  borderRadius:8,
-                  border:isSel?"2px solid #e8b84b":isToday?"2px solid #3498db":"2px solid #1e2d4a",
-                  background:admin?admin.color+"33":"#111827",
-                  padding:"7px 3px 6px",cursor:"pointer",minHeight:58,
-                  display:"flex",flexDirection:"column",alignItems:"center",
-                  transition:"all 0.15s",
-                  boxShadow:isSel?"0 0 0 2px #e8b84b55":"none"
-                }}>
+                <div key={day} onClick={()=>setSelDay(isSel?null:day)} style={{borderRadius:8,border:isSel?"2px solid #e8b84b":isToday?"2px solid #3498db":"2px solid #1e2d4a",background:admin?admin.color+"33":"#111827",padding:"7px 3px 6px",cursor:"pointer",minHeight:58,display:"flex",flexDirection:"column",alignItems:"center",transition:"all 0.15s",boxShadow:isSel?"0 0 0 2px #e8b84b55":"none"}}>
                   <div style={{fontSize:13,fontWeight:700,color:isToday?"#3498db":"#c5d0e0",marginBottom:4}}>{day}</div>
-                  {admin
-                    ?<div style={{background:admin.color,borderRadius:5,padding:"2px 5px",fontSize:9,fontWeight:700,color:"#fff",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{admin.name}</div>
-                    :<div style={{fontSize:15,color:"#2a3a5a"}}>+</div>
-                  }
+                  {admin?<div style={{background:admin.color,borderRadius:5,padding:"2px 5px",fontSize:9,fontWeight:700,color:"#fff",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{admin.name}</div>:<div style={{fontSize:15,color:"#2a3a5a"}}>+</div>}
                 </div>
               );
             })}
           </div>
-
-          {/* Assignment panel */}
           {selDay&&(
             <div style={{marginTop:14,background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:12,padding:"16px 18px",animation:"slideIn 0.2s"}}>
-              <div style={{fontSize:15,fontWeight:700,marginBottom:12,color:"#e8b84b"}}>
-                ✏️ שיבוץ ל-{selDay} {HEB_MONTHS[month]}
-              </div>
+              <div style={{fontSize:15,fontWeight:700,marginBottom:12,color:"#e8b84b"}}>✏️ שיבוץ ל-{selDay} {HEB_MONTHS[month]}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-                {data.admins.map(a=>{
-                  const cur=data.assignments[key(selDay)]===a.id;
-                  return(
-                    <button key={a.id} onClick={()=>assign(selDay,a.id)} style={{
-                      background:cur?a.color:a.color+"33",
-                      border:`2px solid ${a.color}`,
-                      borderRadius:8,padding:"9px 18px",
-                      color:"#fff",fontWeight:700,cursor:"pointer",fontSize:14
-                    }}>{a.name} {cur&&"✓"}</button>
-                  );
+                {admins.map(a=>{
+                  const cur=assignments[key(selDay)]===a.id;
+                  return(<button key={a.id} onClick={()=>assign(selDay,a.id)} style={{background:cur?a.color:a.color+"33",border:`2px solid ${a.color}`,borderRadius:8,padding:"9px 18px",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:14}}>{a.name} {cur&&"✓"}</button>);
                 })}
-                {data.assignments[key(selDay)]&&(
-                  <button onClick={()=>clearDay(selDay)} style={{background:"transparent",border:"2px solid #e74c3c",borderRadius:8,padding:"9px 16px",color:"#e74c3c",fontWeight:700,cursor:"pointer",fontSize:14}}>
-                    🗑️ הסר
-                  </button>
-                )}
+                {assignments[key(selDay)]&&<button onClick={()=>clearDay(selDay)} style={{background:"transparent",border:"2px solid #e74c3c",borderRadius:8,padding:"9px 16px",color:"#e74c3c",fontWeight:700,cursor:"pointer",fontSize:14}}>🗑️ הסר</button>}
               </div>
             </div>
           )}
-
-          {/* Stats */}
           <div style={{marginTop:22,background:"#111827",borderRadius:12,padding:"16px 18px",border:"1px solid #1e2d4a"}}>
             <div style={{fontSize:14,fontWeight:700,color:"#90a4c0",marginBottom:12}}>📊 סיכום {HEB_MONTHS[month]}</div>
             {stats.map(a=>(
@@ -301,76 +217,44 @@ function AdminPanel(){
                 <div style={{width:12,height:12,borderRadius:"50%",background:a.color,flexShrink:0}}/>
                 <div style={{flex:1,fontSize:14}}>{a.name}</div>
                 <div style={{background:a.color+"33",border:`1px solid ${a.color}`,borderRadius:6,padding:"2px 10px",fontSize:13,fontWeight:700,color:a.color}}>{a.count} ימים</div>
-                <div style={{width:80,height:6,background:"#1e2d4a",borderRadius:4,overflow:"hidden"}}>
-                  <div style={{height:"100%",borderRadius:4,background:a.color,width:`${daysInMonth?(a.count/daysInMonth)*100:0}%`,transition:"width 0.4s"}}/>
-                </div>
+                <div style={{width:80,height:6,background:"#1e2d4a",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",borderRadius:4,background:a.color,width:`${daysInMonth?(a.count/daysInMonth)*100:0}%`,transition:"width 0.4s"}}/></div>
               </div>
             ))}
           </div>
         </>}
-
-        {/* ── TEAM TAB ── */}
         {tab==="team"&&<>
-          <div style={{fontSize:16,fontWeight:700,color:"#e8b84b",marginBottom:16}}>מנהלי הקלאן ({data.admins.length})</div>
-
-          {/* Add admin */}
+          <div style={{fontSize:16,fontWeight:700,color:"#e8b84b",marginBottom:16}}>מנהלי הקלאן ({admins.length})</div>
           <div style={{display:"flex",gap:8,marginBottom:20}}>
             <input value={newName} onChange={e=>setNewName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addAdmin()} placeholder="שם מנהל חדש..." style={{flex:1,background:"#111827",border:"1px solid #2a3a5a",borderRadius:8,padding:"10px 14px",color:"#e8eaf6",fontSize:14,outline:"none"}}/>
             <button onClick={addAdmin} style={{background:"#e8b84b",border:"none",borderRadius:8,padding:"10px 18px",color:"#111",fontWeight:700,cursor:"pointer",fontSize:14}}>+ הוסף</button>
           </div>
-
-          {/* Admin list */}
-          {data.admins.map(a=>{
-            const mc=Object.keys(data.assignments).filter(k=>k.startsWith(`${year}-${month+1}-`)&&data.assignments[k]===a.id).length;
-            const tc=Object.values(data.assignments).filter(v=>v===a.id).length;
+          {admins.map(a=>{
+            const mc=Object.keys(assignments).filter(k=>k.startsWith(`${year}_${month+1}_`)&&assignments[k]===a.id).length;
+            const tc=Object.values(assignments).filter(v=>v===a.id).length;
             return(
               <div key={a.id} style={{background:"#111827",border:"1px solid #1e2d4a",borderRadius:10,padding:"14px 16px",marginBottom:10}}>
                 <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:10}}>
-                  <div style={{width:42,height:42,borderRadius:"50%",background:a.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,color:"#fff",flexShrink:0}}>
-                    {a.name[0]}
-                  </div>
+                  <div style={{width:42,height:42,borderRadius:"50%",background:a.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:700,color:"#fff",flexShrink:0}}>{a.name[0]}</div>
                   <div style={{flex:1}}>
-                    <input
-                      value={a.name}
-                      onChange={e=>changeName(a.id,e.target.value)}
-                      style={{background:"transparent",border:"none",borderBottom:"1px solid #2a3a5a",color:"#e8eaf6",fontSize:15,fontWeight:700,outline:"none",width:"100%",padding:"2px 0"}}
-                    />
+                    <input value={a.name} onChange={e=>changeName(a.id,e.target.value)} style={{background:"transparent",border:"none",borderBottom:"1px solid #2a3a5a",color:"#e8eaf6",fontSize:15,fontWeight:700,outline:"none",width:"100%",padding:"2px 0"}}/>
                     <div style={{fontSize:12,color:"#7a8faa",marginTop:3}}>החודש: {mc} ימים · סה״כ: {tc} ימים</div>
                   </div>
-                  {data.admins.length>1&&(
-                    <button onClick={()=>removeAdmin(a.id)} style={{background:"transparent",border:"1px solid #e74c3c",borderRadius:6,padding:"5px 12px",color:"#e74c3c",cursor:"pointer",fontSize:13}}>הסר</button>
-                  )}
+                  {admins.length>1&&<button onClick={()=>removeAdmin(a.id)} style={{background:"transparent",border:"1px solid #e74c3c",borderRadius:6,padding:"5px 12px",color:"#e74c3c",cursor:"pointer",fontSize:13}}>הסר</button>}
                 </div>
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  {COLORS.map(c=>(
-                    <div key={c} onClick={()=>changeColor(a.id,c)} style={{width:24,height:24,borderRadius:"50%",background:c,cursor:"pointer",border:a.color===c?"3px solid #fff":"3px solid transparent",transition:"border 0.15s"}}/>
-                  ))}
+                  {COLORS.map(c=>(<div key={c} onClick={()=>changeColor(a.id,c)} style={{width:24,height:24,borderRadius:"50%",background:c,cursor:"pointer",border:a.color===c?"3px solid #fff":"3px solid transparent",transition:"border 0.15s"}}/>))}
                 </div>
               </div>
             );
           })}
-
-          {/* Password change hint */}
-          <div style={{marginTop:24,background:"#1a2744",border:"1px dashed #2a3a5a",borderRadius:10,padding:"14px 16px"}}>
-            <div style={{fontSize:13,color:"#7a8faa",marginBottom:4}}>🔒 שינוי סיסמה</div>
-            <div style={{fontSize:12,color:"#4a5a7a"}}>
-              פתח את הקובץ <code style={{color:"#e8b84b",background:"#0a0e1a",padding:"1px 5px",borderRadius:4}}>admin.html</code> בעורך טקסט, ושנה את הערך של <code style={{color:"#e8b84b",background:"#0a0e1a",padding:"1px 5px",borderRadius:4}}>ADMIN_PASSWORD</code> בשורה השניה של הסקריפט.
-            </div>
-          </div>
         </>}
       </div>
-
       {toast&&<div style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:"#2ecc71",color:"#fff",fontWeight:700,fontSize:15,borderRadius:10,padding:"12px 28px",boxShadow:"0 4px 20px #0008",zIndex:1000,animation:"fadeIn 0.2s",whiteSpace:"nowrap"}}>{toast}</div>}
     </div>
   );
 }
 
-/* ─── Root ─── */
-function Root(){
-  const [loggedIn,setLoggedIn]=useState(false);
-  return loggedIn?<AdminPanel/>:<LoginScreen onLogin={()=>setLoggedIn(true)}/>;
-}
-
+function Root(){const [in_,setIn]=useState(false);return in_?<AdminPanel/>:<LoginScreen onLogin={()=>setIn(true)}/>;}
 ReactDOM.createRoot(document.getElementById("root")).render(<Root/>);
 </script>
 </body>

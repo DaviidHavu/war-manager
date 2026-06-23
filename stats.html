@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>📊 סטטיסטיקות – War Manager</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getDatabase, ref, onValue, set, push } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    const app = initializeApp({ databaseURL: "https://war-manager-5c4c6-default-rtdb.firebaseio.com" });
+    const db = getDatabase(app);
+    window.__firebase = { ref, onValue, set, push, db };
+  </script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:#0a0e1a;font-family:'Segoe UI',Arial,sans-serif;direction:rtl;}
+    button,input,select{font-family:inherit;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+    @keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+    @keyframes slideIn{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect}=React;
+const HEB_MONTHS=["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
+const DEFAULT_ADMINS=[{id:"1",name:"דויד",color:"#e74c3c"},{id:"2",name:"מנהל 2",color:"#e67e22"},{id:"3",name:"מנהל 3",color:"#2ecc71"}];
+
+function getDays(y,m){return new Date(y,m+1,0).getDate();}
+
+// Mini bar chart component
+function Bar({value,max,color,label,sub}){
+  const pct=max?Math.round((value/max)*100):0;
+  return(
+    <div style={{marginBottom:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:10,height:10,borderRadius:"50%",background:color}}/>
+          <span style={{fontSize:14,color:"#e8eaf6",fontWeight:600}}>{label}</span>
+        </div>
+        <span style={{fontSize:13,color,fontWeight:700}}>{value} {sub}</span>
+      </div>
+      <div style={{height:8,background:"#1e2d4a",borderRadius:4,overflow:"hidden"}}>
+        <div style={{height:"100%",background:color,borderRadius:4,width:`${pct}%`,transition:"width 0.6s ease"}}/>
+      </div>
+    </div>
+  );
+}
+
+// Mini donut-like ring
+function StatCard({icon,label,value,color}){
+  return(
+    <div style={{background:"#111827",border:`1px solid ${color}33`,borderRadius:12,padding:"16px",flex:1,minWidth:120,textAlign:"center"}}>
+      <div style={{fontSize:26,marginBottom:6}}>{icon}</div>
+      <div style={{fontSize:24,fontWeight:800,color}}>{value}</div>
+      <div style={{fontSize:12,color:"#7a8faa",marginTop:4}}>{label}</div>
+    </div>
+  );
+}
+
+function App(){
+  const today=new Date();
+  const [admins,setAdmins]=useState([]);
+  const [assignments,setAssignments]=useState({});
+  const [warResults,setWarResults]=useState({});
+  const [loading,setLoading]=useState(true);
+  const [tab,setTab]=useState("overview");
+  const [toast,setToast]=useState(null);
+
+  // For adding war results
+  const [selYear,setSelYear]=useState(today.getFullYear());
+  const [selMonth,setSelMonth]=useState(today.getMonth());
+  const [selDay,setSelDay]=useState(1);
+  const [selResult,setSelResult]=useState("win");
+  const [selNotes,setSelNotes]=useState("");
+
+  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2200);};
+
+  useEffect(()=>{
+    const wait=()=>{
+      if(!window.__firebase){setTimeout(wait,100);return;}
+      const {ref,onValue,db}=window.__firebase;
+      onValue(ref(db,"admins"),(snap)=>{const v=snap.val();setAdmins(v?Object.values(v):DEFAULT_ADMINS);setLoading(false);});
+      onValue(ref(db,"assignments"),(snap)=>{setAssignments(snap.val()||{});});
+      onValue(ref(db,"warResults"),(snap)=>{setWarResults(snap.val()||{});});
+    };
+    wait();
+  },[]);
+
+  const addResult=async()=>{
+    const {ref,set,db}=window.__firebase;
+    const k=`${selYear}_${selMonth+1}_${selDay}`;
+    await set(ref(db,`warResults/${k}`),{result:selResult,notes:selNotes,date:k});
+    setSelNotes("");showToast(selResult==="win"?"🏆 ניצחון נרשם!":selResult==="loss"?"💀 הפסד נרשם":"🤝 תיקו נרשם");
+  };
+
+  // ── Compute stats ──
+  const totalWars=Object.keys(warResults).length;
+  const wins=Object.values(warResults).filter(r=>r.result==="win").length;
+  const losses=Object.values(warResults).filter(r=>r.result==="loss").length;
+  const draws=Object.values(warResults).filter(r=>r.result==="draw").length;
+  const winRate=totalWars?Math.round((wins/totalWars)*100):0;
+
+  // Per-admin stats
+  const adminStats=admins.map(a=>{
+    const days=Object.keys(assignments).filter(k=>assignments[k]===a.id);
+    const adminWins=days.filter(k=>warResults[k]?.result==="win").length;
+    const adminLosses=days.filter(k=>warResults[k]?.result==="loss").length;
+    const adminDraws=days.filter(k=>warResults[k]?.result==="draw").length;
+    const total=days.length;
+    const recorded=adminWins+adminLosses+adminDraws;
+    return{...a,total,wins:adminWins,losses:adminLosses,draws:adminDraws,recorded,winRate:recorded?Math.round((adminWins/recorded)*100):0};
+  }).sort((a,b)=>b.wins-a.wins);
+
+  // Monthly breakdown
+  const monthlyData=[];
+  for(let m=0;m<12;m++){
+    const monthWars=Object.keys(warResults).filter(k=>k.startsWith(`${today.getFullYear()}_${m+1}_`));
+    const mWins=monthWars.filter(k=>warResults[k]?.result==="win").length;
+    const mLosses=monthWars.filter(k=>warResults[k]?.result==="loss").length;
+    monthlyData.push({month:HEB_MONTHS[m],wins:mWins,losses:mLosses,total:monthWars.length});
+  }
+
+  // Recent results (last 10)
+  const recentResults=Object.entries(warResults)
+    .sort(([a],[b])=>b.localeCompare(a))
+    .slice(0,10)
+    .map(([k,v])=>{
+      const adminId=assignments[k];
+      const admin=admins.find(a=>a.id===adminId);
+      const [y,m,d]=k.split("_");
+      return{...v,key:k,admin,date:`${d} ${HEB_MONTHS[parseInt(m)-1]} ${y}`};
+    });
+
+  if(loading)return(<div style={{minHeight:"100vh",background:"#0a0e1a",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}><div style={{width:48,height:48,border:"4px solid #1e2d4a",borderTop:"4px solid #e8b84b",borderRadius:"50%",animation:"spin 0.9s linear infinite"}}/><div style={{color:"#7a8faa",fontSize:15}}>טוען נתונים...</div></div>);
+
+  const resultIcon=r=>r==="win"?"🏆":r==="loss"?"💀":"🤝";
+  const resultColor=r=>r==="win"?"#2ecc71":r==="loss"?"#e74c3c":"#f1c40f";
+  const resultLabel=r=>r==="win"?"ניצחון":r==="loss"?"הפסד":"תיקו";
+
+  const daysInSelMonth=getDays(selYear,selMonth);
+
+  return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#0a0e1a,#1a1f35,#0d1520)",color:"#e8eaf6",paddingBottom:40}}>
+      {/* Header */}
+      <div style={{background:"linear-gradient(90deg,#1a2744,#0f3460,#1a2744)",borderBottom:"2px solid #e8b84b",padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 4px 24px #000a"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}><span style={{fontSize:30}}>📊</span><div><div style={{fontSize:19,fontWeight:800,color:"#e8b84b"}}>סטטיסטיקות</div><div style={{fontSize:11,color:"#90a4c0"}}>היסטוריה · ביצועים · תוצאות</div></div></div>
+        <div style={{display:"flex",gap:8}}>
+          <a href="index.html" style={{textDecoration:"none",background:"#1a274499",border:"1px solid #2a3a5a",borderRadius:8,padding:"7px 13px",color:"#90a4c0",fontSize:12,fontWeight:600}}>📅 לוח</a>
+          <a href="admin.html" style={{textDecoration:"none",background:"#1a274499",border:"1px solid #2a3a5a",borderRadius:8,padding:"7px 13px",color:"#7a8faa",fontSize:12,fontWeight:600}}>🔒 אדמין</a>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{display:"flex",borderBottom:"1px solid #2a3a5a",background:"#111827"}}>
+        {[["overview","🏠 סקירה"],["admins","👥 מנהלים"],["add","➕ הוסף תוצאה"]].map(([t,label])=>(
+          <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"12px 0",border:"none",cursor:"pointer",background:tab===t?"#1a2744":"transparent",color:tab===t?"#e8b84b":"#7a8faa",fontWeight:tab===t?700:400,fontSize:14,borderBottom:tab===t?"2px solid #e8b84b":"2px solid transparent"}}>{label}</button>
+        ))}
+      </div>
+
+      <div style={{maxWidth:700,margin:"0 auto",padding:"18px 12px 0"}}>
+
+        {/* ── OVERVIEW TAB ── */}
+        {tab==="overview"&&<>
+          {/* Big stats */}
+          <div style={{display:"flex",gap:10,marginBottom:20,flexWrap:"wrap"}}>
+            <StatCard icon="⚔️" label="סה״כ מלחמות" value={totalWars} color="#e8b84b"/>
+            <StatCard icon="🏆" label="ניצחונות" value={wins} color="#2ecc71"/>
+            <StatCard icon="💀" label="הפסדים" value={losses} color="#e74c3c"/>
+            <StatCard icon="📈" label="אחוז ניצחון" value={`${winRate}%`} color="#3498db"/>
+          </div>
+
+          {/* Win rate bar */}
+          {totalWars>0&&(
+            <div style={{background:"#111827",borderRadius:12,padding:"16px 18px",border:"1px solid #1e2d4a",marginBottom:18}}>
+              <div style={{fontSize:14,fontWeight:700,color:"#90a4c0",marginBottom:12}}>יחס ניצחונות/הפסדים</div>
+              <div style={{height:20,background:"#1e2d4a",borderRadius:10,overflow:"hidden",display:"flex"}}>
+                <div style={{height:"100%",background:"#2ecc71",width:`${totalWars?(wins/totalWars)*100:0}%`,transition:"width 0.6s"}}/>
+                <div style={{height:"100%",background:"#f1c40f",width:`${totalWars?(draws/totalWars)*100:0}%`,transition:"width 0.6s"}}/>
+                <div style={{height:"100%",background:"#e74c3c",width:`${totalWars?(losses/totalWars)*100:0}%`,transition:"width 0.6s"}}/>
+              </div>
+              <div style={{display:"flex",gap:16,marginTop:10}}>
+                {[["🏆 ניצחון",wins,"#2ecc71"],["🤝 תיקו",draws,"#f1c40f"],["💀 הפסד",losses,"#e74c3c"]].map(([l,v,c])=>(
+                  <div key={l} style={{display:"flex",alignItems:"center",gap:6,fontSize:12}}>
+                    <div style={{width:10,height:10,borderRadius:2,background:c}}/>
+                    <span style={{color:"#90a4c0"}}>{l}:</span>
+                    <span style={{color:c,fontWeight:700}}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Monthly chart */}
+          <div style={{background:"#111827",borderRadius:12,padding:"16px 18px",border:"1px solid #1e2d4a",marginBottom:18}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#90a4c0",marginBottom:14}}>ניצחונות לפי חודש ({today.getFullYear()})</div>
+            <div style={{display:"flex",alignItems:"flex-end",gap:4,height:80}}>
+              {monthlyData.map((m,i)=>{
+                const maxVal=Math.max(...monthlyData.map(x=>x.total),1);
+                const hW=m.wins?(m.wins/maxVal)*70:0;
+                const hL=m.losses?(m.losses/maxVal)*70:0;
+                return(
+                  <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                    <div style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",height:70,gap:1}}>
+                      {m.wins>0&&<div style={{width:"60%",height:hW,background:"#2ecc71",borderRadius:"2px 2px 0 0",minHeight:m.wins?3:0}}/>}
+                      {m.losses>0&&<div style={{width:"60%",height:hL,background:"#e74c3c",borderRadius:"2px 2px 0 0",minHeight:m.losses?3:0}}/>}
+                      {m.total===0&&<div style={{width:"60%",height:3,background:"#1e2d4a",borderRadius:2}}/>}
+                    </div>
+                    <div style={{fontSize:9,color:"#4a5a7a",marginTop:2}}>{m.month.slice(0,3)}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",gap:12,marginTop:8}}>
+              <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#7a8faa"}}><div style={{width:10,height:10,borderRadius:2,background:"#2ecc71"}}/> ניצחונות</div>
+              <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#7a8faa"}}><div style={{width:10,height:10,borderRadius:2,background:"#e74c3c"}}/> הפסדים</div>
+            </div>
+          </div>
+
+          {/* Recent results */}
+          <div style={{background:"#111827",borderRadius:12,padding:"16px 18px",border:"1px solid #1e2d4a"}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#90a4c0",marginBottom:12}}>10 תוצאות אחרונות</div>
+            {recentResults.length===0&&<div style={{color:"#4a5a7a",fontSize:13,textAlign:"center",padding:"20px 0"}}>עדיין אין תוצאות מוקלטות</div>}
+            {recentResults.map((r,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #1e2d4a"}}>
+                <div style={{fontSize:22}}>{resultIcon(r.result)}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600,color:resultColor(r.result)}}>{resultLabel(r.result)}</div>
+                  <div style={{fontSize:11,color:"#7a8faa",marginTop:2}}>{r.date} · {r.admin?r.admin.name:"לא משובץ"}</div>
+                  {r.notes&&<div style={{fontSize:11,color:"#4a5a7a",marginTop:1}}>📝 {r.notes}</div>}
+                </div>
+                {r.admin&&<div style={{width:8,height:8,borderRadius:"50%",background:r.admin.color}}/>}
+              </div>
+            ))}
+          </div>
+        </>}
+
+        {/* ── ADMINS TAB ── */}
+        {tab==="admins"&&<>
+          <div style={{fontSize:15,fontWeight:700,color:"#e8b84b",marginBottom:16}}>ביצועים לפי מנהל</div>
+          {adminStats.map(a=>(
+            <div key={a.id} style={{background:"#111827",border:"1px solid #1e2d4a",borderRadius:12,padding:"16px 18px",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}>
+                <div style={{width:44,height:44,borderRadius:"50%",background:a.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:700,color:"#fff",flexShrink:0}}>{a.name[0]}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:16,fontWeight:700}}>{a.name}</div>
+                  <div style={{fontSize:12,color:"#7a8faa",marginTop:2}}>{a.total} ימי ניהול · {a.recorded} תוצאות מוקלטות</div>
+                </div>
+                <div style={{textAlign:"center"}}>
+                  <div style={{fontSize:22,fontWeight:800,color:a.winRate>=60?"#2ecc71":a.winRate>=40?"#f1c40f":"#e74c3c"}}>{a.winRate}%</div>
+                  <div style={{fontSize:10,color:"#7a8faa"}}>אחוז ניצחון</div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:10,marginBottom:12}}>
+                {[["🏆",a.wins,"ניצחונות","#2ecc71"],["🤝",a.draws,"תיקו","#f1c40f"],["💀",a.losses,"הפסדים","#e74c3c"]].map(([icon,val,label,color])=>(
+                  <div key={label} style={{flex:1,background:color+"11",border:`1px solid ${color}33`,borderRadius:8,padding:"8px",textAlign:"center"}}>
+                    <div style={{fontSize:16}}>{icon}</div>
+                    <div style={{fontSize:18,fontWeight:800,color}}>{val}</div>
+                    <div style={{fontSize:10,color:"#7a8faa"}}>{label}</div>
+                  </div>
+                ))}
+              </div>
+              {a.recorded>0&&(
+                <div style={{height:8,background:"#1e2d4a",borderRadius:4,overflow:"hidden",display:"flex"}}>
+                  <div style={{height:"100%",background:"#2ecc71",width:`${(a.wins/a.recorded)*100}%`}}/>
+                  <div style={{height:"100%",background:"#f1c40f",width:`${(a.draws/a.recorded)*100}%`}}/>
+                  <div style={{height:"100%",background:"#e74c3c",width:`${(a.losses/a.recorded)*100}%`}}/>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Leaderboard */}
+          <div style={{background:"#111827",borderRadius:12,padding:"16px 18px",border:"1px solid #1e2d4a",marginTop:4}}>
+            <div style={{fontSize:14,fontWeight:700,color:"#90a4c0",marginBottom:14}}>🥇 לוח הישגים – ניצחונות</div>
+            {[...adminStats].sort((a,b)=>b.wins-a.wins).map((a,i)=>(
+              <Bar key={a.id} value={a.wins} max={Math.max(...adminStats.map(x=>x.wins),1)} color={a.color} label={`${["🥇","🥈","🥉"][i]||"  "} ${a.name}`} sub="ניצחונות"/>
+            ))}
+          </div>
+        </>}
+
+        {/* ── ADD RESULT TAB ── */}
+        {tab==="add"&&<>
+          <div style={{fontSize:15,fontWeight:700,color:"#e8b84b",marginBottom:16}}>הוספת תוצאת מלחמה</div>
+          <div style={{background:"#111827",border:"1px solid #1e2d4a",borderRadius:12,padding:"20px 18px"}}>
+
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:13,color:"#90a4c0",marginBottom:8}}>תאריך המלחמה</div>
+              <div style={{display:"flex",gap:8}}>
+                <select value={selDay} onChange={e=>setSelDay(parseInt(e.target.value))} style={{flex:1,background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:8,padding:"10px",color:"#e8eaf6",fontSize:14,outline:"none"}}>
+                  {Array.from({length:daysInSelMonth},(_,i)=>i+1).map(d=><option key={d} value={d}>{d}</option>)}
+                </select>
+                <select value={selMonth} onChange={e=>{setSelMonth(parseInt(e.target.value));setSelDay(1);}} style={{flex:2,background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:8,padding:"10px",color:"#e8eaf6",fontSize:14,outline:"none"}}>
+                  {HEB_MONTHS.map((m,i)=><option key={i} value={i}>{m}</option>)}
+                </select>
+                <select value={selYear} onChange={e=>setSelYear(parseInt(e.target.value))} style={{flex:1,background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:8,padding:"10px",color:"#e8eaf6",fontSize:14,outline:"none"}}>
+                  {[today.getFullYear()-1,today.getFullYear(),today.getFullYear()+1].map(y=><option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:13,color:"#90a4c0",marginBottom:8}}>תוצאה</div>
+              <div style={{display:"flex",gap:8}}>
+                {[["win","🏆 ניצחון","#2ecc71"],["draw","🤝 תיקו","#f1c40f"],["loss","💀 הפסד","#e74c3c"]].map(([val,label,color])=>(
+                  <button key={val} onClick={()=>setSelResult(val)} style={{flex:1,padding:"12px 8px",border:`2px solid ${selResult===val?color:"#2a3a5a"}`,borderRadius:10,background:selResult===val?color+"22":"transparent",color:selResult===val?color:"#7a8faa",fontWeight:700,cursor:"pointer",fontSize:14,transition:"all 0.15s"}}>{label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:13,color:"#90a4c0",marginBottom:8}}>הערה (אופציונלי)</div>
+              <input value={selNotes} onChange={e=>setSelNotes(e.target.value)} placeholder="למשל: מלחמה קשה, ניצחנו 3 כוכבים..." style={{width:"100%",background:"#1a2744",border:"1px solid #2a3a5a",borderRadius:8,padding:"10px 14px",color:"#e8eaf6",fontSize:14,outline:"none"}}/>
+            </div>
+
+            {/* Preview who managed */}
+            {(()=>{
+              const k=`${selYear}_${selMonth+1}_${selDay}`;
+              const adminId=assignments[k];
+              const admin=admins.find(a=>a.id===adminId);
+              return admin?(
+                <div style={{background:"#1a2744",borderRadius:8,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{width:10,height:10,borderRadius:"50%",background:admin.color}}/>
+                  <span style={{fontSize:13,color:"#90a4c0"}}>מנהל המלחמה:</span>
+                  <span style={{fontSize:14,fontWeight:700,color:admin.color}}>{admin.name}</span>
+                </div>
+              ):(
+                <div style={{background:"#1a274466",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#4a5a7a"}}>⚠️ אין שיבוץ לתאריך זה בלוח</div>
+              );
+            })()}
+
+            <button onClick={addResult} style={{width:"100%",background:"#e8b84b",border:"none",borderRadius:10,padding:"14px",color:"#111",fontWeight:800,fontSize:16,cursor:"pointer"}}>
+              שמור תוצאה ⚔️
+            </button>
+          </div>
+        </>}
+      </div>
+
+      {toast&&<div style={{position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",background:"#2ecc71",color:"#fff",fontWeight:700,fontSize:15,borderRadius:10,padding:"12px 28px",boxShadow:"0 4px 20px #0008",zIndex:1000,animation:"fadeIn 0.2s",whiteSpace:"nowrap"}}>{toast}</div>}
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
