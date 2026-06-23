@@ -22,7 +22,7 @@ const {useState,useEffect}=React;
 
 const API_KEY="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiIsImtpZCI6IjI4YTMxOGY3LTAwMDAtYTFlYi03ZmExLTJjNzQzM2M2Y2NhNSJ9.eyJpc3MiOiJzdXBlcmNlbGwiLCJhdWQiOiJzdXBlcmNlbGw6Z2FtZWFwaSIsImp0aSI6IjhhOWQ0ODhlLTdlOWYtNDczYS1hYjM4LTZmN2U5NDk0NTZkYiIsImlhdCI6MTc4MjIwMTI1NSwic3ViIjoiZGV2ZWxvcGVyLzBlMmQ3ZGVjLTU1MDYtZjNlNy0yY2FjLTQ1MDg5MDMwMmVlMCIsInNjb3BlcyI6WyJjbGFzaCJdLCJsaW1pdHMiOlt7InRpZXIiOiJkZXZlbG9wZXIvc2lsdmVyIiwidHlwZSI6InRocm90dGxpbmcifSx7ImNpZHJzIjpbIjg1LjEzMC4yMzguMTQxIl0sInR5cGUiOiJjbGllbnQifV19.EEoHFCq_4-aafiNLZYIA3X9vt2svRO27kBPo2BV6IJ_abxExvCVqt3S0-at54n7CQ_pyWTUwagX0GYYgK35mHg";
 const CLAN_TAG="#2JLUJV8U8";
-const PROXY="https://api.allorigins.win/raw?url=";
+const WORKER="https://coc-proxy.nexter96.workers.dev";
 
 function roleLabel(r){return{leader:"מנהיג",coLeader:"מנהל",admin:"זוטר",member:"חבר"}[r]||r;}
 function roleColor(r){return{leader:"#e8b84b",coLeader:"#e74c3c",admin:"#3498db",member:"#7a8faa"}[r]||"#7a8faa";}
@@ -77,7 +77,7 @@ function App(){
       const headers={"Authorization":`Bearer ${API_KEY}`};
 
       // Clan info
-      const clanRes=await fetch(`${PROXY}https://api.clashofclans.com/v1/clans/${tag}`,{headers});
+      const clanRes=await fetch(`${WORKER}/clans/${tag}`);
       if(!clanRes.ok){
         const err=await clanRes.json().catch(()=>({}));
         throw new Error(err.message||`שגיאה ${clanRes.status}`);
@@ -87,13 +87,13 @@ function App(){
 
       // Current war
       try{
-        const warRes=await fetch(`${PROXY}https://api.clashofclans.com/v1/clans/${tag}/currentwar`,{headers});
+        const warRes=await fetch(`${WORKER}/clans/${tag}/currentwar`);
         if(warRes.ok){const d=await warRes.json();setWar(d);}
       }catch{}
 
       // War log
       try{
-        const logRes=await fetch(`${PROXY}https://api.clashofclans.com/v1/clans/${tag}/warlog?limit=10`,{headers});
+        const logRes=await fetch(`${WORKER}/clans/${tag}/warlog?limit=10`);
         if(logRes.ok){const d=await logRes.json();setWarlog(d.items||[]);}
       }catch{}
 
